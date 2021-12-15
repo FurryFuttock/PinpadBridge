@@ -1,24 +1,16 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
-using System.Diagnostics;
-using System.Linq;
-using System.Net;
 using System.ServiceProcess;
 using System.ServiceModel;
 using System.ServiceModel.Web;
 using System.Text;
-using System.Threading.Tasks;
 using System.IO.Ports;
 using System.Threading;
-using System.Reflection;
 
 namespace PinpadBridge
 {
     public partial class PinpadBridgeService : ServiceBase
     {
-
         #region REST API
         public class Response
         {
@@ -63,12 +55,7 @@ namespace PinpadBridge
         public class PinpadBridge : IPinpadBridge
         {
             #region Configuration
-            String Port_Name = "COM3";
-            int Port_BaudRate = 115200;
-            Parity Port_Parity = Parity.None;
-            int Port_DataBits = 8;
-            StopBits Port_StopBits = StopBits.One;
-            int Terminal_AckTimeoutMs = 10000;
+            Properties.PinpadBridge settings = new Properties.PinpadBridge();
             #endregion
 
             #region Serial
@@ -96,7 +83,7 @@ namespace PinpadBridge
                 have_response.Reset();
                 if (SerialPort_Send(input_fields))
                 {
-                    if (have_ack.WaitOne(Terminal_AckTimeoutMs) && have_response.WaitOne(timeout_ms))
+                    if (have_ack.WaitOne(settings.Terminal_AckTimeoutMs) && have_response.WaitOne(timeout_ms))
                     {
                         rc = true;
                     }
@@ -221,7 +208,7 @@ namespace PinpadBridge
             {
                 if (serial_port == null)
                 {
-                    serial_port = new SerialPort(Port_Name, Port_BaudRate, Port_Parity, Port_DataBits, Port_StopBits);
+                    serial_port = new SerialPort(settings.Port_Name, settings.Port_BaudRate, settings.Port_Parity, settings.Port_DataBits, settings.Port_StopBits);
                     serial_port.DataReceived += SerialPort_DataReceived;
                     serial_port.Open();
                 }
@@ -240,9 +227,9 @@ namespace PinpadBridge
                 String[] response_fields;
                 if (!SerialPort_DoIt(new string[] { "1010", "00", "01" }, out response_fields, 35000))
                 {
-                    if ((response_fields != null) && (response_fields.Length == 2))
+                    if ((response_fields != null) && (response_fields.Length == 1))
                     {
-                        response.ResponseCode = int.Parse(response_fields[1]);
+                        response.ResponseCode = (response_fields[0][0] == ACK) ? 0 : -1;
                         response.ResponseDescription = response.ResponseCode == 0 ? "OK" : "ERROR";
                     }
                     else
