@@ -84,14 +84,18 @@ namespace MilliwaysServiceManager {
             service_handle = NULL;
         }
 
-        System::Text::StringBuilder ^sb = gcnew System::Text::StringBuilder();
-        for each (System::String^ s in dependencies)
+        const TCHAR *szDependencies = TEXT("");
+        if (dependencies != nullptr)
         {
-            sb->Append(s);
+            System::Text::StringBuilder ^sb = gcnew System::Text::StringBuilder();
+            for each (System::String^ s in dependencies)
+            {
+                sb->Append(s);
+                sb->Append("\0");
+            }
             sb->Append("\0");
+            szDependencies = (gcnew marshal_context())->marshal_as<const TCHAR *>(sb->ToString());
         }
-        sb->Append("\0");
-        const TCHAR *szDependencies = (gcnew marshal_context())->marshal_as<const TCHAR *>(sb->ToString());
 
         SC_HANDLE service_handle = CreateService(
             service_manager_handle,
