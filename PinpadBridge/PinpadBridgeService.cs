@@ -83,7 +83,7 @@ namespace PinpadBridge
                 have_response.Reset();
                 if (SerialPort_Send(input_fields))
                 {
-                    if (have_ack.WaitOne(settings.Terminal_AckTimeoutMs) && have_response.WaitOne(timeout_ms))
+                    if (have_ack.WaitOne(settings.Pinpad_AckTimeoutMs) && have_response.WaitOne(timeout_ms))
                     {
                         rc = true;
                     }
@@ -330,8 +330,8 @@ namespace PinpadBridge
 
         public void DoStart()
         {
-            String base_address = "http://localhost:8123/PinpadBridge";
-            host = new WebServiceHost(typeof(PinpadBridge), new Uri(base_address));
+            Properties.PinpadBridge settings = new Properties.PinpadBridge();
+            host = new WebServiceHost(typeof(PinpadBridge), new Uri(settings.Http_Url));
             host.Open();
         }
 

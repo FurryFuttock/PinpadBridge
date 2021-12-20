@@ -17,8 +17,11 @@
     <Setting Name="Port_StopBits" Type="System.IO.Ports.StopBits" Scope="Application">
       <Value Profile="(Default)">One</Value>
     </Setting>
-    <Setting Name="Terminal_AckTimeoutMs" Type="System.Int32" Scope="Application">
+    <Setting Name="Pinpad_AckTimeoutMs" Type="System.Int32" Scope="Application">
       <Value Profile="(Default)">10000</Value>
+    </Setting>
+    <Setting Name="Http_Url" Type="System.String" Scope="Application">
+      <Value Profile="(Default)">http://localhost:8123/PinpadBridge</Value>
     </Setting>
   </Settings>
 </SettingsFile>
