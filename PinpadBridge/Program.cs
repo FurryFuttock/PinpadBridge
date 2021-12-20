@@ -49,18 +49,28 @@ namespace PinpadBridge
             {
                 using (ServiceManager sm = new MilliwaysServiceManager.ServiceManager())
                 {
-                    sm.Install
-                    (
-                        "PinpadBridge", "PinpadBridge", System.Reflection.Assembly.GetEntryAssembly().Location,
-                        ServiceManager.SERVICE_TYPE.WIN32_OWN_PROCESS, ServiceManager.SERVICE_START_TYPE.AUTO, ServiceManager.SERVICE_ERROR_TYPE.NORMAL, null
-                    );
+                    if (sm.Install("PinpadBridge", "PinpadBridge", System.Reflection.Assembly.GetEntryAssembly().Location, ServiceManager.SERVICE_TYPE.WIN32_OWN_PROCESS, ServiceManager.SERVICE_START_TYPE.AUTO, ServiceManager.SERVICE_ERROR_TYPE.NORMAL, null) == 0)
+                    {
+                        Console.WriteLine("PinpadBridge service installed correctly");
+                    }
+                    else
+                    {
+                        Console.WriteLine("PinpadBridge service installation failed");
+                    }
                 }
             }
             else if ((args.Length == 1) && (args[0] == "/u"))
             {
                 using (ServiceManager sm = new MilliwaysServiceManager.ServiceManager())
                 {
-                    sm.Uninstall("PinpadBridge");
+                    if (sm.Uninstall("PinpadBridge") == 0)
+                    {
+                        Console.WriteLine("PinpadBridge service uninstalled correctly");
+                    }
+                    else
+                    {
+                        Console.WriteLine("PinpadBridge service uninstallation failed");
+                    }
                 }
             }
         }
