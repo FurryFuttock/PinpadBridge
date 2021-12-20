@@ -25,7 +25,7 @@ namespace PinpadBridge.Properties {
         
         [global::System.Configuration.ApplicationScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("COM5")]
+        [global::System.Configuration.DefaultSettingValueAttribute("COM3")]
         public string Port_Name {
             get {
                 return ((string)(this["Port_Name"]));
