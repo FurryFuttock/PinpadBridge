@@ -70,19 +70,19 @@ namespace PinpadBridge.Properties {
         
         [global::System.Configuration.ApplicationScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("10000")]
-        public int Pinpad_AckTimeoutMs {
+        [global::System.Configuration.DefaultSettingValueAttribute("http://localhost:8123/PinpadBridge")]
+        public string Http_Url {
             get {
-                return ((int)(this["Pinpad_AckTimeoutMs"]));
+                return ((string)(this["Http_Url"]));
             }
         }
         
         [global::System.Configuration.ApplicationScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("http://localhost:8123/PinpadBridge")]
-        public string Http_Url {
+        [global::System.Configuration.DefaultSettingValueAttribute("10")]
+        public int Pinpad_AckTimeoutS {
             get {
-                return ((string)(this["Http_Url"]));
+                return ((int)(this["Pinpad_AckTimeoutS"]));
             }
         }
     }

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ServiceProcess;
 using System.ServiceModel;
@@ -77,14 +77,15 @@ namespace PinpadBridge
             enum ReceiveStatus { idle, data, lrc };
             ReceiveStatus receive_status = ReceiveStatus.idle;
 
-            private bool SerialPort_DoIt(String[] input_fields, out String[] output_fields, int timeout_ms)
+            private bool SerialPort_DoIt(String[] input_fields, out String[] output_fields, int timeout_s)
             {
                 bool rc = false;
                 have_response.Reset();
                 if (SerialPort_Send(input_fields))
                 {
-                    if (have_ack.WaitOne(settings.Pinpad_AckTimeoutMs) && have_response.WaitOne(timeout_ms))
+                    WriteLog("Wait for ACK...");
                     {
+                        if (have_response.WaitOne(timeout_s * 1000))
                         rc = true;
                     }
                 }
@@ -225,7 +226,7 @@ namespace PinpadBridge
 
                 Response_Status response = new Response_Status();
                 String[] response_fields;
-                if (!SerialPort_DoIt(new string[] { "1010", "00", "01" }, out response_fields, 35000))
+                if (SerialPort_DoIt(new string[] { "1010", "00", "01" }, out response_fields, 35))
                 {
                     if ((response_fields != null) && (response_fields.Length == 1))
                     {
