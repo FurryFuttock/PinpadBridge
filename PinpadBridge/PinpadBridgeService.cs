@@ -7,6 +7,9 @@ using System.Text;
 using System.IO.Ports;
 using System.Threading;
 using Newtonsoft.Json;
+using System.ServiceModel.Dispatcher;
+using System.ServiceModel.Description;
+using System.ServiceModel.Channels;
 
 namespace PinpadBridge
 {
@@ -107,11 +110,11 @@ namespace PinpadBridge
 
         public class PinpadBridge : IPinpadBridge
         {
-            #region Configuration
+#region Configuration
             Properties.PinpadBridge settings = new Properties.PinpadBridge();
-            #endregion
+#endregion
 
-            #region Serial
+#region Serial
             static ManualResetEvent have_response = new ManualResetEvent(false);
             static ManualResetEvent have_ack = new ManualResetEvent(false);
             static String receive_string = "";
@@ -277,16 +280,18 @@ namespace PinpadBridge
                     }
                 }
             }
-            #endregion
+#endregion
 
             public PinpadBridge()
             {
+#if false
                 if (serial_port == null)
                 {
                     serial_port = new SerialPort(settings.Port_Name, settings.Port_BaudRate, settings.Port_Parity, settings.Port_DataBits, settings.Port_StopBits);
                     serial_port.DataReceived += SerialPort_DataReceived;
                     serial_port.Open();
                 }
+#endif
             }
 
             ~PinpadBridge()
@@ -529,7 +534,7 @@ namespace PinpadBridge
         }
 
         WebServiceHost host = null;
-        #endregion
+#endregion
 
         public PinpadBridgeService()
         {

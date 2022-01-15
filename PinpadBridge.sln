@@ -7,6 +7,13 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PinpadBridge", "PinpadBridg
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "MilliwaysServiceManager", "MilliwaysServiceManager\MilliwaysServiceManager.vcxproj", "{619F8168-83A3-404C-85E4-94CC27039401}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "PinpadBridge2", "PinpadBridge2\PinpadBridge2.vcxproj", "{DC15261F-2FA8-4678-9A7B-563DE23FC437}"
+	ProjectSection(ProjectDependencies) = postProject
+		{99161562-2C62-4C8A-8260-074883075C8F} = {99161562-2C62-4C8A-8260-074883075C8F}
+	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "jsoncpp", "jsoncpp\jsoncpp.vcxproj", "{99161562-2C62-4C8A-8260-074883075C8F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -40,6 +47,26 @@ Global
 		{619F8168-83A3-404C-85E4-94CC27039401}.Release|x64.Build.0 = Release|x64
 		{619F8168-83A3-404C-85E4-94CC27039401}.Release|x86.ActiveCfg = Release|Win32
 		{619F8168-83A3-404C-85E4-94CC27039401}.Release|x86.Build.0 = Release|Win32
+		{DC15261F-2FA8-4678-9A7B-563DE23FC437}.Debug|Any CPU.ActiveCfg = Debug|Win32
+		{DC15261F-2FA8-4678-9A7B-563DE23FC437}.Debug|x64.ActiveCfg = Debug|x64
+		{DC15261F-2FA8-4678-9A7B-563DE23FC437}.Debug|x64.Build.0 = Debug|x64
+		{DC15261F-2FA8-4678-9A7B-563DE23FC437}.Debug|x86.ActiveCfg = Debug|Win32
+		{DC15261F-2FA8-4678-9A7B-563DE23FC437}.Debug|x86.Build.0 = Debug|Win32
+		{DC15261F-2FA8-4678-9A7B-563DE23FC437}.Release|Any CPU.ActiveCfg = Release|Win32
+		{DC15261F-2FA8-4678-9A7B-563DE23FC437}.Release|x64.ActiveCfg = Release|x64
+		{DC15261F-2FA8-4678-9A7B-563DE23FC437}.Release|x64.Build.0 = Release|x64
+		{DC15261F-2FA8-4678-9A7B-563DE23FC437}.Release|x86.ActiveCfg = Release|Win32
+		{DC15261F-2FA8-4678-9A7B-563DE23FC437}.Release|x86.Build.0 = Release|Win32
+		{99161562-2C62-4C8A-8260-074883075C8F}.Debug|Any CPU.ActiveCfg = Debug|Win32
+		{99161562-2C62-4C8A-8260-074883075C8F}.Debug|x64.ActiveCfg = Debug|x64
+		{99161562-2C62-4C8A-8260-074883075C8F}.Debug|x64.Build.0 = Debug|x64
+		{99161562-2C62-4C8A-8260-074883075C8F}.Debug|x86.ActiveCfg = Debug|Win32
+		{99161562-2C62-4C8A-8260-074883075C8F}.Debug|x86.Build.0 = Debug|Win32
+		{99161562-2C62-4C8A-8260-074883075C8F}.Release|Any CPU.ActiveCfg = Release|Win32
+		{99161562-2C62-4C8A-8260-074883075C8F}.Release|x64.ActiveCfg = Release|x64
+		{99161562-2C62-4C8A-8260-074883075C8F}.Release|x64.Build.0 = Release|x64
+		{99161562-2C62-4C8A-8260-074883075C8F}.Release|x86.ActiveCfg = Release|Win32
+		{99161562-2C62-4C8A-8260-074883075C8F}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
