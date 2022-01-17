@@ -568,10 +568,11 @@ int mensaje(value &request, value &response)
     WRITE_LOG("%s starts", __FUNCTION__);
     write_log_json("request:", 0, request);
 
+    int display_duration = request["DisplayDuration"];
     int messages = min(static_cast<_array>(request["Message"]).size(), 4);
     std::vector<std::string> serialport_request =
     {
-        "1020", request["DisplayDuration"] == 0 ? "00" : "01", pad(static_cast<int>(request["DisplayDuration"]), 2),
+        "1020", display_duration == 0 ? "00" : "01", pad(display_duration, 2),
         pad(messages, 2),
         pad(messages > 0 ? static_cast<const char *>(static_cast<_array>(request["Message"])[0]) : "", 16),
         pad(messages > 1 ? static_cast<const char *>(static_cast<_array>(request["Message"])[1]) : "", 16),
@@ -579,7 +580,7 @@ int mensaje(value &request, value &response)
         pad(messages > 3 ? static_cast<const char *>(static_cast<_array>(request["Message"])[3]) : "", 16)
     };
     std::vector<std::string> serialport_response;
-    if (serialport_doit("COM1", serialport_request, serialport_response, 10, static_cast<int>(request["DisplayDuration"]) + 1))
+    if (serialport_doit("COM1", serialport_request, serialport_response, 10, display_duration ? (display_duration + 1) : 60))
     {
         if (serialport_response.size() == 3)
         {
@@ -609,10 +610,11 @@ int seleccion(value &request, value &response)
     WRITE_LOG("%s starts", __FUNCTION__);
     write_log_json("request:", 0, request);
 
+    int display_duration = request["DisplayDuration"];
     int messages = min(static_cast<_array>(request["Message"]).size(), 4);
     std::vector<std::string> serialport_request =
     {
-        "1030", request["DisplayDuration"] == 0 ? "00" : "01", pad(static_cast<int>(request["DisplayDuration"]), 2),
+        "1030", display_duration == 0 ? "00" : "01", pad(display_duration, 2),
         pad(messages, 2),
         pad(messages > 0 ? static_cast<const char *>(static_cast<_array>(request["Message"])[0]) : "", 16),
         pad(messages > 1 ? static_cast<const char *>(static_cast<_array>(request["Message"])[1]) : "", 16),
@@ -620,7 +622,7 @@ int seleccion(value &request, value &response)
         pad(messages > 3 ? static_cast<const char *>(static_cast<_array>(request["Message"])[3]) : "", 16)
     };
     std::vector<std::string> serialport_response;
-    if (serialport_doit("COM1", serialport_request, serialport_response, 10, static_cast<int>(request["DisplayDuration"]) + 1))
+    if (serialport_doit("COM1", serialport_request, serialport_response, 10, display_duration ? (display_duration + 1) : 60))
     {
         if (serialport_response.size() == 4)
         {
@@ -706,7 +708,7 @@ int carga_llaves(value &request, value &response)
         pad(static_cast<const char *>(request["DataEncryptionKeyII"]), 32)
     };
     std::vector<std::string> serialport_response;
-    if (serialport_doit("COM1", serialport_request, serialport_response, 10, 35))
+    if (serialport_doit("COM1", serialport_request, serialport_response, 10, 120))
     {
         if (serialport_response.size() == 10)
         {
@@ -747,7 +749,7 @@ int lectura_pin(value &request, value &response)
         pad(messages > 1 ? static_cast<const char *>(static_cast<_array>(request["Message"])[1]) : "", 16),
     };
     std::vector<std::string> serialport_response;
-    if (serialport_doit("COM1", serialport_request, serialport_response, 10, 35))
+    if (serialport_doit("COM1", serialport_request, serialport_response, 10, 120))
     {
         if (serialport_response.size() == 10)
         {
