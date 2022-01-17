@@ -37,6 +37,6 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <None Include="PindpadBridge2.ini" />
+    <CopyFileToFolders Include="PinpadBridge2.ini" />
   </ItemGroup>
 </Project>
