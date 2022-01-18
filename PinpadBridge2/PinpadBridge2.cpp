@@ -21,29 +21,50 @@
 struct Namespace namespaces[] = { {NULL, NULL} };
 
 static volatile bool run = false;
+static volatile bool log_to_file = true;
 
 static void write_log(const char *file, int line, const char *format, ...)
 {
-    // local data
-    va_list arg;
-    time_t log_time;
-    char date_stamp[9], time_stamp[9];
-    
+    // remove the path from the file name
     const char *p = strrchr(file, '\\');
     if (p)
         file = p + 1;
 
     // get the time stamps
-    log_time = time(0);
+    time_t log_time = time(0);
+    char date_stamp[9], time_stamp[9];
     strftime(time_stamp, sizeof(time_stamp), "%H:%M:%S", localtime(&log_time));
     strftime(date_stamp, sizeof(date_stamp), "%Y%m%d", localtime(&log_time));
 
-    // log to standard error
-    fprintf(stderr, "%s@%s [%s@%05i] ", date_stamp, time_stamp, file, line);
+    FILE *f = stderr;
+    if (log_to_file)
+    {
+        // Get the executable path
+        char file_path[MAX_PATH];
+        DWORD file_path_length = GetModuleFileName(NULL, file_path, sizeof(file_path));
+
+        // Create the log path from the executable path
+        char *ext = strrchr(file_path, '.');
+        if (ext)
+        {
+            strcpy(ext, ".log");
+        }
+
+        // Open file file
+        f = fopen(file_path, "a");
+    }
+
+    fprintf(f, "%s@%s [%s@%05i] ", date_stamp, time_stamp, file, line);
+    va_list arg;
     va_start(arg, format);
-    vfprintf(stderr, format, arg);
+    vfprintf(f, format, arg);
     va_end(arg);
-    fprintf(stderr, "\n");
+    fprintf(f, "\n");
+
+    if (log_to_file)
+    {
+        fclose(f);
+    }
 }
 
 static void write_log_system_error(const char *file, int line, const std::string &prompt, DWORD error)
@@ -52,6 +73,11 @@ static void write_log_system_error(const char *file, int line, const std::string
     FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_ALLOCATE_BUFFER, NULL, error, 0, (LPSTR)&message, 0, NULL);
     if (message)
     {
+        // Remove trailing end of line characters
+        for (size_t i = strlen(message) - 1; (i > 0) && (message[i] <= ' '); i--)
+        {
+            message[i] = 0;
+        }
         write_log(file, line, "%s: %s", prompt.c_str(), message);
         LocalFree(message);
     }
@@ -975,6 +1001,8 @@ namespace servicemanager
 
     static int install(const std::string &service_name, const std::string &display_name, const std::string &path, SERVICE_TYPE::type service_type, SERVICE_START_TYPE::type start_type, SERVICE_ERROR_TYPE::type error_control, const std::vector<std::string> &dependencies)
     {
+        int rc = -1;
+
         if (open_servicemanager())
             return -1;
 
@@ -992,7 +1020,12 @@ namespace servicemanager
                 ss << *i;
                 ss << '\0';
             }
+
+            // Make sure that it always has 2 nulls at the end
             ss << '\0';
+            ss << '\0';
+
+            // Store it
             dependencies_str = ss.str();
         }
 
@@ -1011,10 +1044,17 @@ namespace servicemanager
             NULL,
             NULL
         );
-        if (!service_handle)
-            write_log_system_error(__FILE__, __LINE__, __FUNCTION__, GetLastError());
+        if (service_handle)
+        {
+            rc = 0;
+        }
+        else
+        {
+            DWORD error = GetLastError();
+            write_log_system_error(__FILE__, __LINE__, __FUNCTION__, error);
+        }
 
-        return -(service_handle == NULL);
+        return rc;
     }
 }
 
@@ -1302,7 +1342,17 @@ static void service::stop()
 // start function required by the service namespace
 static DWORD __stdcall service::start(void *context)
 {
-    return rest_api();
+    DWORD rc = 0;
+
+    // Tell service manager that we are running
+    report_status(SERVICE_RUNNING, NO_ERROR, SERVICE_WAIT_HINT);
+
+    // Run the service
+    rc = rest_api();
+
+    // Tell the service manager that we have stopped
+    report_status(SERVICE_STOPPED, NO_ERROR, 0);
+    return rc;
 }
 
 // print help message
@@ -1345,12 +1395,14 @@ int main(int argc, char *argv[], char *envp[])
         {
             WRITE_LOG("StartServiceCtrlDispatcher fails");
         }
-        // We are being started from the service manager
     }
     else if (argc == 2)
     { 
         if (!_stricmp(argv[1], "/d"))
         {
+            // Log to the screen
+            log_to_file = false;
+
             // Register for Ctrl-C
             WRITE_LOG("Presione Ctrl-C para detener.");
             SetConsoleCtrlHandler(ctrl_handler, TRUE);
@@ -1364,11 +1416,27 @@ int main(int argc, char *argv[], char *envp[])
             char file_path[MAX_PATH];
             DWORD file_path_length = GetModuleFileName(NULL, file_path, sizeof(file_path));
             std::vector<std::string> dependencies;
-            servicemanager::install(SERVICE_NAME, SERVICE_NAME, file_path, servicemanager::SERVICE_TYPE::WIN32_OWN_PROCESS, servicemanager::SERVICE_START_TYPE::AUTO, servicemanager::SERVICE_ERROR_TYPE::NORMAL, dependencies);
+            rc = servicemanager::install(SERVICE_NAME, SERVICE_NAME, file_path, servicemanager::SERVICE_TYPE::WIN32_OWN_PROCESS, servicemanager::SERVICE_START_TYPE::AUTO, servicemanager::SERVICE_ERROR_TYPE::NORMAL, dependencies);
+            if (rc)
+            {
+                WRITE_LOG("Error installing service %s", SERVICE_NAME);
+            }
+            else
+            {
+                WRITE_LOG("Service %s installed correctly", SERVICE_NAME);
+            }
         }
         else if (!_stricmp(argv[1], "/u"))
         {
-            // Uninstall service
+            rc = servicemanager::uninstall(SERVICE_NAME);
+            if (rc)
+            {
+                WRITE_LOG("Error uninstalling service %s", SERVICE_NAME);
+            }
+            else
+            {
+                WRITE_LOG("Service %s uninstalled correctly", SERVICE_NAME);
+            }
         }
         else
         {
