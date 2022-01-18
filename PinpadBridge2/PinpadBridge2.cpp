@@ -530,20 +530,23 @@ namespace serialport
         return true;
     }
 
-    static bool doit(const struct parameters &parameters, const std::vector<std::string> &request, std::vector<std::string> &response, int ack_timeout_s, int command_timeout_s)
+    static bool doit(const struct parameters &parameters, const std::vector<std::string> &request, std::vector<std::string> &response, std::stringstream &response_description, int ack_timeout_s, int command_timeout_s)
     {
         bool rc = false;
         HANDLE port_handle = open(parameters, 1024);
         if (!port_handle)
         {
+            response_description << "Error abriendo puerto " << parameters.port;
             WRITE_LOG("Error opening port %s", parameters.port.c_str());
         }
         else if (!send(port_handle, request, ack_timeout_s))
         {
+            response_description << "Error enviando datos al puerto " << parameters.port;
             WRITE_LOG("Error sending data to port %s", parameters.port.c_str());
         }
         else if (!recv(port_handle, response, command_timeout_s))
         {
+            response_description << "Error recibiendo datos desde el puerto " << parameters.port;
             WRITE_LOG("Error receiving data from port %s", parameters.port.c_str());
         }
         else
@@ -605,22 +608,26 @@ namespace json
 
         std::vector<std::string> serialport_request = { "1010", "00", "01" };
         std::vector<std::string> serialport_response;
-        if (serialport::doit(parameters, serialport_request, serialport_response, 10, 35))
+        std::stringstream serialport_response_description;
+        int rc = serialport::doit(parameters, serialport_request, serialport_response, serialport_response_description, 10, 35);
+        if (rc)
         {
             if ((serialport_response.size() == 1) && (serialport_response[0].length() == 1))
             {
                 response["ResponseCode"] = (serialport_response[0][0] == ACK) ? 0 : -1;
+                response["ResponseDescription"] = response["ResponseCode"] == 0 ? "OK" : "ERROR";
             }
             else
             {
                 response["ResponseCode"] = -1;
+                response["ResponseDescription"] = "Error en formato de respuesta";
             }
         }
         else
         {
             response["ResponseCode"] = -1;
+            response["ResponseDescription"] = serialport_response_description.str();
         }
-        response["ResponseDescription"] = response["ResponseCode"] == 0 ? "OK" : "ERROR";
 
         write_log_json("response:", 0, response);
         WRITE_LOG("%s stops", __FUNCTION__);
@@ -647,22 +654,25 @@ namespace json
             pad(messages > 3 ? static_cast<const char *>(static_cast<_array>(request["Message"])[3]) : "", 16)
         };
         std::vector<std::string> serialport_response;
-        if (serialport::doit(parameters, serialport_request, serialport_response, 10, display_duration ? (display_duration + 1) : 60))
+        std::stringstream serialport_response_description;
+        if (serialport::doit(parameters, serialport_request, serialport_response, serialport_response_description, 10, display_duration ? (display_duration + 1) : 60))
         {
             if (serialport_response.size() == 3)
             {
                 response["ResponseCode"] = atoi(serialport_response[1].c_str());
+                response["ResponseDescription"] = response["ResponseCode"] == 0 ? "OK" : "ERROR";
             }
             else
             {
                 response["ResponseCode"] = -1;
+                response["ResponseDescription"] = "Error en formato de respuesta";
             }
         }
         else
         {
             response["ResponseCode"] = -1;
+            response["ResponseDescription"] = serialport_response_description.str();
         }
-        response["ResponseDescription"] = response["ResponseCode"] == 0 ? "OK" : "ERROR";
 
         write_log_json("response:", 0, response);
         WRITE_LOG("%s stops", __FUNCTION__);
@@ -689,23 +699,26 @@ namespace json
             pad(messages > 3 ? static_cast<const char *>(static_cast<_array>(request["Message"])[3]) : "", 16)
         };
         std::vector<std::string> serialport_response;
-        if (serialport::doit(parameters, serialport_request, serialport_response, 10, display_duration ? (display_duration + 1) : 60))
+        std::stringstream serialport_response_description;
+        if (serialport::doit(parameters, serialport_request, serialport_response, serialport_response_description, 10, display_duration ? (display_duration + 1) : 60))
         {
             if (serialport_response.size() == 4)
             {
                 response["ResponseCode"] = atoi(serialport_response[1].c_str());
+                response["ResponseDescription"] = response["ResponseCode"] == 0 ? "OK" : "ERROR";
                 response["Value"] = response["ResponseCode"] == 0 ? serialport_response[2] : "";
             }
             else
             {
                 response["ResponseCode"] = -1;
+                response["ResponseDescription"] = "Error en formato de respuesta";
             }
         }
         else
         {
             response["ResponseCode"] = -1;
+            response["ResponseDescription"] = serialport_response_description.str();
         }
-        response["ResponseDescription"] = response["ResponseCode"] == 0 ? "OK" : "ERROR";
 
         write_log_json("response:", 0, response);
         WRITE_LOG("%s stops", __FUNCTION__);
@@ -729,11 +742,13 @@ namespace json
             static_cast<const char *>(request["CardType"])
         };
         std::vector<std::string> serialport_response;
-        if (serialport::doit(parameters, serialport_request, serialport_response, 10, 35))
+        std::stringstream serialport_response_description;
+        if (serialport::doit(parameters, serialport_request, serialport_response, serialport_response_description, 10, 35))
         {
             if (serialport_response.size() == 10)
             {
                 response["ResponseCode"] = atoi(serialport_response[1].c_str());
+                response["ResponseDescription"] = response["ResponseCode"] == 0 ? "OK" : "ERROR";
                 response["CaptureType"] = serialport_response[2];
                 response["Track1"] = serialport_response[3];
                 response["Track2"] = serialport_response[4];
@@ -745,13 +760,14 @@ namespace json
             else
             {
                 response["ResponseCode"] = -1;
+                response["ResponseDescription"] = "Error en formato de respuesta";
             }
         }
         else
         {
             response["ResponseCode"] = -1;
+            response["ResponseDescription"] = serialport_response_description.str();
         }
-        response["ResponseDescription"] = response["ResponseCode"] == 0 ? "OK" : "ERROR";
 
         write_log_json("response:", 0, response);
         WRITE_LOG("%s stops", __FUNCTION__);
@@ -775,22 +791,25 @@ namespace json
             pad(static_cast<const char *>(request["DataEncryptionKeyII"]), 32)
         };
         std::vector<std::string> serialport_response;
-        if (serialport::doit(parameters, serialport_request, serialport_response, 10, 120))
+        std::stringstream serialport_response_description;
+        if (serialport::doit(parameters, serialport_request, serialport_response, serialport_response_description, 10, 120))
         {
             if (serialport_response.size() == 10)
             {
                 response["ResponseCode"] = atoi(serialport_response[1].c_str());
+                response["ResponseDescription"] = response["ResponseCode"] == 0 ? "OK" : "ERROR";
             }
             else
             {
                 response["ResponseCode"] = -1;
+                response["ResponseDescription"] = "Error en formato de respuesta";
             }
         }
         else
         {
             response["ResponseCode"] = -1;
+            response["ResponseDescription"] = serialport_response_description.str();
         }
-        response["ResponseDescription"] = response["ResponseCode"] == 0 ? "OK" : "ERROR";
 
         write_log_json("response:", 0, response);
         WRITE_LOG("%s stops", __FUNCTION__);
@@ -816,23 +835,26 @@ namespace json
             pad(messages > 1 ? static_cast<const char *>(static_cast<_array>(request["Message"])[1]) : "", 16),
         };
         std::vector<std::string> serialport_response;
-        if (serialport::doit(parameters, serialport_request, serialport_response, 10, 120))
+        std::stringstream serialport_response_description;
+        if (serialport::doit(parameters, serialport_request, serialport_response, serialport_response_description, 10, 120))
         {
             if (serialport_response.size() == 10)
             {
                 response["ResponseCode"] = atoi(serialport_response[1].c_str());
+                response["ResponseDescription"] = response["ResponseCode"] == 0 ? "OK" : "ERROR";
                 response["PinBlock"] = serialport_response[2];
             }
             else
             {
                 response["ResponseCode"] = -1;
+                response["ResponseDescription"] = "Error en formato de respuesta";
             }
         }
         else
         {
             response["ResponseCode"] = -1;
+            response["ResponseDescription"] = serialport_response_description.str();
         }
-        response["ResponseDescription"] = response["ResponseCode"] == 0 ? "OK" : "ERROR";
 
         write_log_json("response:", 0, response);
         WRITE_LOG("%s stops", __FUNCTION__);
@@ -1246,12 +1268,16 @@ static int rest_api()
     struct serialport::parameters parameters;
     read_ini(parameters);
 
+    
     // create an allocation context
     soap *ctx = soap_new1(SOAP_IO_KEEPALIVE | SOAP_C_UTFSTRING);
     // bind to port 8123
     if (!soap_valid_socket(soap_bind(ctx, NULL, 8123, 100)))
     {
-        soap_print_fault(ctx, stderr);
+        std::stringstream ss;
+        soap_stream_fault(ctx, ss);
+        std::string fault_str = ss.str();
+        WRITE_LOG("%s", fault_str.c_str());
     }
     else
     {
@@ -1275,7 +1301,10 @@ static int rest_api()
             }
             if (!soap_valid_socket(soap_accept(ctx)))
             {
-                soap_print_fault(ctx, stderr);
+                std::stringstream ss;
+                soap_stream_fault(ctx, ss);
+                std::string fault_str = ss.str();
+                WRITE_LOG("%s", fault_str.c_str());
                 run = false;
             }
             else
@@ -1289,11 +1318,11 @@ static int rest_api()
                 }
                 else
                 {
-                    int rc = 404;
+                    int rc = 0;
 
                     if (!_stricmp(ctx->path, "/PinpadBridge/ConsultaEstado"))
                     {
-                        rc = json::consulta_estado(parameters, request, response);
+                        json::consulta_estado(parameters, request, response);
                     }
                     else if (!_stricmp(ctx->path, "/PinpadBridge/Mensaje"))
                     {
@@ -1318,10 +1347,14 @@ static int rest_api()
                     else
                     {
                         WRITE_LOG("[%s] not found", ctx->path);
+                        rc = 404;
+                        response["ResponseCode"] = -1;
+                        response["ResponseDescription"] = "URI no existe";
                     }
 
                     if (!response.has("ResponseCode") || !response.has("ResponseDescription"))
                     {
+                        rc = -1;
                         response["ResponseCode"] = -1;
                         response["ResponseDescription"] = "ERROR";
                     }
@@ -1334,7 +1367,12 @@ static int rest_api()
                     if (soap_response(ctx, SOAP_FILE + rc)
                         || json_send(ctx, response)
                         || soap_end_send(ctx))
-                        json_send_fault(ctx);
+                    {
+                        std::stringstream ss;
+                        soap_stream_fault(ctx, ss);
+                        std::string fault_str = ss.str();
+                        WRITE_LOG("%s", fault_str.c_str());
+                    }
                     soap_closesock(ctx);
                 }
 
@@ -1386,7 +1424,7 @@ static BOOL WINAPI ctrl_handler(DWORD fdwCtrlType)
 {
     if (fdwCtrlType == CTRL_C_EVENT)
     {
-        WRITE_LOG("Stopped by user");
+        WRITE_LOG("Stop requested by user.");
         run = false;
         return TRUE;
     }
