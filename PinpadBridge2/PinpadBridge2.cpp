@@ -21,9 +21,9 @@
 struct Namespace namespaces[] = { {NULL, NULL} };
 
 static volatile bool run = false;
-static volatile bool log_to_file = true;
+static volatile bool log_to_file = false;
 
-static void write_log(const char *file, int line, const char *format, ...)
+static void write_log(const char *file, int line, FILE* f, const char *format, va_list arg)
 {
     // remove the path from the file name
     const char *p = strrchr(file, '\\');
@@ -36,7 +36,18 @@ static void write_log(const char *file, int line, const char *format, ...)
     strftime(time_stamp, sizeof(time_stamp), "%H:%M:%S", localtime(&log_time));
     strftime(date_stamp, sizeof(date_stamp), "%Y%m%d", localtime(&log_time));
 
-    FILE *f = stderr;
+    fprintf(f, "%s@%s [%s@%05i] ", date_stamp, time_stamp, file, line);
+    vfprintf(f, format, arg);
+    fprintf(f, "\n");
+}
+
+static void write_log(const char *file, int line, const char *format, ...)
+{
+    // Get the argument list
+    va_list arg;
+    va_start(arg, format);
+
+    // If we have to log to a file then ...
     if (log_to_file)
     {
         // Get the executable path
@@ -51,20 +62,27 @@ static void write_log(const char *file, int line, const char *format, ...)
         }
 
         // Open file file
-        f = fopen(file_path, "a");
-    }
+        FILE *f = fopen(file_path, "a");
 
-    fprintf(f, "%s@%s [%s@%05i] ", date_stamp, time_stamp, file, line);
-    va_list arg;
-    va_start(arg, format);
-    vfprintf(f, format, arg);
-    va_end(arg);
-    fprintf(f, "\n");
+        // Copy the argument list
+        va_list arg1;
+        va_copy(arg1, arg);
 
-    if (log_to_file)
-    {
+        // Write log
+        write_log(file, line, f, format, arg1);
+
+        // Terminate the argument list
+        va_end(arg1);
+
+        // Close the file
         fclose(f);
     }
+
+    // Log to the console
+    write_log(file, line, stderr, format, arg);
+
+    // Terminate the argument list
+    va_end(arg);
 }
 
 static void write_log_system_error(const char *file, int line, const std::string &prompt, DWORD error)
@@ -1162,6 +1180,8 @@ namespace service
 // read serial port parameters from the ini file
 static void read_ini(struct serialport::parameters &parameters)
 {
+    char value[16];
+
     // Get the executable path
     char file_path[MAX_PATH];
     DWORD file_path_length = GetModuleFileName(NULL, file_path, sizeof(file_path));
@@ -1175,8 +1195,11 @@ static void read_ini(struct serialport::parameters &parameters)
     }
     WRITE_LOG("Initialisation file path=%s", file_path);
 
+    GetPrivateProfileString("log", "file", "false", value, sizeof(value), file_path);
+    if (!_stricmp(value, "true")) log_to_file = true;
+    else log_to_file = false;
+
     // Read the INI file
-    char value[256];
     GetPrivateProfileString("serialport", "port", "COM1", value, sizeof(value), file_path); parameters.port = value;
     GetPrivateProfileString("serialport", "baudrate", "9600", value, sizeof(value), file_path); parameters.baudrate = atol(value);
     switch (parameters.baudrate)
@@ -1305,12 +1328,6 @@ static int rest_api()
 
                     // set http content type
                     ctx->http_content = "application/json; charset=utf-8";
-                    ctx->http_extra_header =
-                        "Access-Control-Allow-Origin: *\r\n"
-                        "Access-Control-Allow-Credentials: true\r\n"
-                        "Access-Control-Allow-Headers: Origin, Content-Type, Accept, Authorization\r\n"
-                        "Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS, HEAD"
-                        ;
                     ctx->keep_alive = false;
 
                     // send http header 200 OK and JSON response
@@ -1400,9 +1417,6 @@ int main(int argc, char *argv[], char *envp[])
     { 
         if (!_stricmp(argv[1], "/d"))
         {
-            // Log to the screen
-            log_to_file = false;
-
             // Register for Ctrl-C
             WRITE_LOG("Presione Ctrl-C para detener.");
             SetConsoleCtrlHandler(ctrl_handler, TRUE);
