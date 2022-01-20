@@ -1362,6 +1362,10 @@ static int rest_api()
                     // set http content type
                     ctx->http_content = "application/json; charset=utf-8";
                     ctx->keep_alive = false;
+                    if (!ctx->cors_origin || !ctx->cors_origin[0])
+                    {
+                        ctx->cors_origin = "*";
+                    }
 
                     // send http header 200 OK and JSON response
                     if (soap_response(ctx, SOAP_FILE + rc)
