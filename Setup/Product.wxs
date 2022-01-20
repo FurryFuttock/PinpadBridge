@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+	<Product Id="*" Name="PinpadBridge Installer" Language="1033" Version="1.0.0.0" Manufacturer="Milliways" UpgradeCode="b7a03fbd-1715-46f2-b7b6-e8693a12730a">
+		<Package InstallerVersion="301" Compressed="yes" InstallScope="perMachine" />
+
+        <!--<Property Id='ARPCOMMENTS'>Version: !(bind.FileVersion.PinpadBridge2)</Property>-->
+        <Property Id='ARPCONTACT'>Milliways Computación Ltda.</Property>
+        <Property Id='ARPURLINFOABOUT'>http://www.milliways.cl/</Property>
+        <!--<Property Id="ARPPRODUCTICON">PCMCAT_Tray.ico</Property>-->
+
+        <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+		<MediaTemplate />
+
+		<Feature Id="ProductFeature" Title="Setup" Level="1">
+            <MergeRef Id="VCRedist"/>
+            <ComponentGroupRef Id="ProductComponents" />
+		</Feature>
+        
+        <CustomAction Id="InstallRegisterPinpadBridge2" Execute="deferred" Impersonate="no" FileKey="PinpadBridge2.exe" ExeCommand="/i" Return="ignore"/>
+        <CustomAction Id="UninstallUnregisterPinpadBridge2" Execute="deferred" Impersonate="no" FileKey="PinpadBridge2.exe" ExeCommand="/u" Return="ignore"/>
+
+        <InstallExecuteSequence>
+            <Custom Action="InstallRegisterPinpadBridge2" After="InstallFiles">NOT Installed</Custom>
+            <Custom Action="UninstallUnregisterPinpadBridge2" Before="RemoveFiles">(NOT UPGRADINGPRODUCTCODE) AND (REMOVE="ALL")</Custom>
+        </InstallExecuteSequence>
+
+        <UIRef Id="WixUI_Minimal" />
+        <WixVariable Id="WixUILicenseRtf" Value="license.rtf" />
+        <!--<WixVariable Id="WixUIBannerBmp" Value="TrioBanner.bmp" />
+        <WixVariable Id="WixUIDialogBmp" Value="TrioDlg.bmp" />-->
+    </Product>
+
+	<Fragment>
+		<Directory Id="TARGETDIR" Name="SourceDir">
+            <!-- The VC redistributable was copied from "C:\Program Files (x86)\Microsoft Visual Studio\2017\Professional\VC\Redist\MSVC\14.16.27012\MergeModules" -->
+            <Merge Id="VCRedist" SourceFile="Microsoft_VC141_CRT_x86.msm" DiskId="1" Language="0"/>
+            <Directory Id="ProgramFilesFolder">
+				<Directory Id="INSTALLFOLDER" Name="PinpadBridge" />
+			</Directory>
+            <Directory Id="ProgramMenuFolder" Name="Programs">
+                <Directory Id="ProgramMenuProductDir" Name="PinpadBridge">
+                </Directory>
+            </Directory>
+        </Directory>
+    </Fragment>
+
+	<Fragment>
+		<ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
+            <Component Id="ProductComponent">
+                <RemoveFolder Id='RemoveProgramMenuProductDir'  Directory='ProgramMenuProductDir' On='uninstall'/>
+                <File Id='PinpadBridge2.exe' Name='PinpadBridge2.exe' Source='$(var.PinpadBridge2.TargetPath)' KeyPath='yes' >
+                </File>
+            </Component>
+            <Component Id="ProductIni">
+                <File Id='PinpadBridge2.ini' Name='PinpadBridge2.ini' Source='$(var.PinpadBridge2.TargetPath)' KeyPath='yes' >
+                </File>
+            </Component>
+            <Component Id="WindowsServiceStart" Guid="{27C2EC8B-1136-4705-86EA-8D84530D2D03}">
+                <File Id='StartService' Name='Start.lnk' Source='Start.lnk' KeyPath='yes'>
+                    <Shortcut Id='StartServiceShortcut' Name='Start' Directory='ProgramMenuProductDir' Advertise='yes' />
+                </File>
+            </Component>
+            <Component Id="WindowsServiceStop" Guid="{2951B617-B74B-4F1E-BD45-C767D1BC2AA1}">
+                <File Id='StopService' Name='Stop.lnk' Source='Stop.lnk' KeyPath='yes'>
+                    <Shortcut Id='StopServiceShortcut' Name='Stop' Directory='ProgramMenuProductDir' Advertise='yes' />
+                </File>
+            </Component>
+        </ComponentGroup>
+	</Fragment>
+</Wix>
