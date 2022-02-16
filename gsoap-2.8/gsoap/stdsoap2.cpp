@@ -7518,6 +7518,7 @@ http_parse(struct soap *soap)
   soap->cors_origin = NULL;
   soap->cors_method = NULL;
   soap->cors_header = NULL;
+  soap->cors_request_private_network = NULL;
   do
   {
     soap->length = 0;
@@ -7833,6 +7834,10 @@ http_parse_header(struct soap *soap, const char *key, const char *val)
   {
     soap->cors_header = soap_strdup(soap, val);
   }
+  else if (!soap_tag_cmp(key, "Access-Control-Request-Private-Network"))
+  {
+    soap->cors_request_private_network = soap_strdup(soap, val);
+  }
 #ifdef WITH_COOKIES
   else if (!soap_tag_cmp(key, "Cookie")
         || !soap_tag_cmp(key, "Cookie2")
@@ -8114,6 +8119,12 @@ http_post(struct soap *soap, const char *endpoint, const char *host, int port, c
         if (err)
           return err;
       }
+      if (soap->cors_request_private_network)
+      {
+          err = soap->fposthdr(soap, "Access-Control-Request-Private-Network", soap->cors_request_private_network);
+          if (err)
+              return err;
+      }
     }
   }
   err = soap_puthttphdr(soap, SOAP_OK, count);
@@ -8348,6 +8359,12 @@ http_response(struct soap *soap, int status, ULONG64 count)
         if (err)
           return err;
       }
+      if (soap->cors_allow_private_network)
+      {
+          err = soap->fposthdr(soap, "Access-Control-Allow-Private-Network", soap->cors_allow_private_network);
+          if (err)
+              return err;
+      }
     }
   }
   if (soap->x_frame_options)
@@ -8359,6 +8376,7 @@ http_response(struct soap *soap, int status, ULONG64 count)
   soap->cors_origin = NULL;
   soap->cors_methods = NULL;
   soap->cors_headers = NULL;
+  soap->cors_allow_private_network = NULL;
   err = soap_puthttphdr(soap, status, count);
   if (err)
     return err;
@@ -12271,8 +12289,10 @@ soap_versioning(soap_init)(struct soap *soap, soap_mode imode, soap_mode omode)
   soap->cors_allow = "*";
   soap->cors_method = NULL;
   soap->cors_header = NULL;
+  soap->cors_request_private_network = NULL;
   soap->cors_methods = NULL;
   soap->cors_headers = NULL;
+  soap->cors_allow_private_network = NULL;
   soap->x_frame_options = "SAMEORIGIN";
   soap->prolog = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
   soap->zlib_state = SOAP_ZLIB_NONE;
