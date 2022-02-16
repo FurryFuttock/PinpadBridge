@@ -15,13 +15,25 @@
 
 #pragma comment(lib, "advapi32.lib")
 
+#define LOGGING_ID "soap_LOGGING-1.0"
 #define WRITE_LOG(...) write_log(__FILE__, __LINE__, __VA_ARGS__)
+#define GET_PRIVATE_PROFILE_STRING(section, entry, default_value, output_value, sizeof_output_value, path) if (!GetPrivateProfileString(section, entry, "", output_value, sizeof_output_value, path)) { strncpy(output_value, default_value, sizeof_output_value); WRITE_LOG("[%s]%s not found in %s, using default value %s", section, entry, path, default_value); }
 
 /* Don't need a namespace table. We put an empty one here to avoid link errors */
 struct Namespace namespaces[] = { {NULL, NULL} };
 
 static volatile bool run = false;
-static volatile bool log_to_file = false;
+static bool log_to_file = false;
+static int port = 8123;
+static int recv_timeout = 8123;
+
+struct logging_data
+{
+    int(*fsend)(struct soap*, const char*, size_t); /* to save and use send callback */
+    size_t(*frecv)(struct soap*, char*, size_t); /* to save and use recv callback */
+};
+
+static const char logging_id[] = LOGGING_ID;
 
 static void write_log(const char *file, int line, FILE* f, const char *format, va_list arg)
 {
@@ -159,6 +171,104 @@ static void write_log_json(const char *prompt, int indent, value &v)
 
     indent--;
     WRITE_LOG("%s%*.*s}", prompt, indent, indent, "");
+}
+
+static size_t logging_recv(struct soap *soap, char *buf, size_t len)
+{
+    struct logging_data *data = (struct logging_data*)soap_lookup_plugin(soap, logging_id);
+    size_t res;
+
+    /* get data from old recv callback */
+    res = data->frecv(soap, buf, len);
+
+    /* log received data */
+    if (res > 0)
+        WRITE_LOG("RECV [%*.*s]", res, res, buf);
+
+    return res;
+}
+
+static int logging_send(struct soap *soap, const char *buf, size_t len)
+{
+    struct logging_data *data = (struct logging_data*)soap_lookup_plugin(soap, logging_id);
+
+    // if it's not too big then log it
+    if (len > 0)
+        WRITE_LOG("SEND [%*.*s]", len, len, buf);
+
+    return data->fsend(soap, buf, len); /* pass data on to old send callback */
+}
+
+/* used by plugin registry function */
+static int logging_init(struct soap *soap, struct logging_data *data)
+{
+    data->fsend = soap->fsend; /* save old recv callback */
+    data->frecv = soap->frecv; /* save old send callback */
+    soap->fsend = logging_send; /* replace send callback with ours */
+    soap->frecv = logging_recv; /* replace recv callback with ours */
+    return SOAP_OK;
+}
+
+static void logging_delete(struct soap *soap, struct soap_plugin *p)
+{
+    struct logging_data *data = (struct logging_data*)p->data;
+
+    /* restore callbacks */
+    soap->fsend = data->fsend; /* replace send callback with ours */
+    soap->frecv = data->frecv; /* replace recv callback with ours */
+
+    /* free allocated plugin data. If fcopy() is not set, then this function is
+       not called for all copies of the plugin created with soap_copy(). In this
+       example, the fcopy() callback is omitted and the plugin data is shared by
+       the soap copies created with soap_copy() */
+    SOAP_FREE(soap, p->data);
+}
+
+/* plugin registry function, invoked by soap_register_plugin */
+static int logging(struct soap *soap, struct soap_plugin *p, void *arg)
+{
+    p->id = logging_id;
+    /* create local plugin data */
+    p->data = (void*)SOAP_MALLOC(soap, sizeof(struct logging_data));
+    /* register the destructor */
+    p->fdelete = logging_delete;
+    /* if OK then initialize */
+    if (p->data)
+    {
+        if (logging_init(soap, (struct logging_data*)p->data))
+        {
+            SOAP_FREE(soap, p->data); /* error: could not init */
+            return SOAP_EOM; /* return error */
+        }
+    }
+    return SOAP_OK;
+}
+
+int register_gsoap_log_plugin(struct soap *soap)
+{
+    int rc = -1;
+    WRITE_LOG("register logging...");
+    if (soap_register_plugin_arg(soap, logging, NULL))
+    {
+        const char *c, *v = NULL, *s, **d;
+
+        // log fault (copied from soap_print_fault)
+        d = soap_faultcode(soap);
+        if (!*d)
+            soap_set_fault(soap);
+        c = *d;
+        if (soap->version == 2)
+            v = *soap_faultsubcode(soap);
+        s = *soap_faultstring(soap);
+        d = soap_faultdetail(soap);
+        WRITE_LOG("%s%d fault: %s [%s]\n\"%s\"\nDetail: %s\n", soap->version ? "SOAP 1." : "Error ", soap->version ? (int)soap->version : soap->error, c, v ? v : "no subcode", s ? s : "[no reason]", d && *d ? *d : "[no detail]");
+        goto fail;
+    }
+
+    rc = 0;
+
+fail:
+    return rc;
 }
 
 /// serialport namespace implements the serial port control and Pinpad protocol
@@ -600,7 +710,7 @@ namespace json
 
     static int consulta_estado(const struct serialport::parameters &parameters, value &request, value &response)
     {
-        // curl -X POST -H "Content-Type: application/json" -d '{}' http://localhost:8123/PinpadBridge/ConsultaEstado
+        // curl -H "Content-Type: application/json" -d '{}' http://localhost:8123/PinpadBridge/ConsultaEstado
         // {"ResponseCode":0,"ResponseDescription":"OK"}
 
         WRITE_LOG("%s starts", __FUNCTION__);
@@ -636,7 +746,7 @@ namespace json
 
     static int mensaje(const struct serialport::parameters &parameters, value &request, value &response)
     {
-        // curl -X POST -H "Content-Type: application/json" -d '{"DisplayDuration":5,"Message": ["<----LINE 0---->","<----LINE 1---->","<----LINE 2---->","<----LINE 3---->"]}' http://localhost:8123/PinpadBridge/Mensaje
+        // curl -H "Content-Type: application/json" -d '{"DisplayDuration":5,"Message": ["<----LINE 0---->","<----LINE 1---->","<----LINE 2---->","<----LINE 3---->"]}' http://localhost:8123/PinpadBridge/Mensaje
         // {"ResponseCode":0,"ResponseDescription":"OK"}
 
         WRITE_LOG("%s starts", __FUNCTION__);
@@ -681,7 +791,7 @@ namespace json
 
     static int seleccion(const struct serialport::parameters &parameters, value &request, value &response)
     {
-        // curl -X POST -H "Content-Type: application/json" -d '{"DisplayDuration":5,"ValueMaximum":2,"Message": ["<----LINE 0---->","<----LINE 1---->","<----LINE 2---->","<----LINE 3---->"]}' http://localhost:8123/PinpadBridge/Mensaje
+        // curl -H "Content-Type: application/json" -d '{"DisplayDuration":5,"ValueMaximum":2,"Message": ["<----LINE 0---->","<----LINE 1---->","<----LINE 2---->","<----LINE 3---->"]}' http://localhost:8123/PinpadBridge/Mensaje
         // {"Value":"01","ResponseCode":0,"ResponseDescription":"OK"}
 
         WRITE_LOG("%s starts", __FUNCTION__);
@@ -727,7 +837,7 @@ namespace json
 
     static int lectura_tarjeta(const struct serialport::parameters &parameters, value &request, value &response)
     {
-        // curl -X POST -H "Content-Type: application/json" -d '{"Store":0,"Amount":123400,"Currency":"CL","CardType":"CR"}' http://localhost:8123/PinpadBridge/LecturaTarjeta
+        // curl -H "Content-Type: application/json" -d '{"Store":0,"Amount":123400,"Currency":"CL","CardType":"CR"}' http://localhost:8123/PinpadBridge/LecturaTarjeta
         // {"CaptureType":"00","Track1":"...","Track2":"...","CardNumber":"...","CardHolderName":"...","CardTypeName":"...","CardTypeAbbreviation":"...","ResponseCode":0,"ResponseDescription":"OK"}
 
         WRITE_LOG("%s starts", __FUNCTION__);
@@ -776,7 +886,7 @@ namespace json
 
     static int carga_llaves(const struct serialport::parameters &parameters, value &request, value &response)
     {
-        // curl -X POST -H "Content-Type: application/json" -d '{"KeyNumber":0,"AuthenticationKey":"...","DataEncryptionKey":"...","DataEncryptionKeyII":"..."}' http://localhost:8123/PinpadBridge/CargaLlaves
+        // curl -H "Content-Type: application/json" -d '{"KeyNumber":0,"AuthenticationKey":"...","DataEncryptionKey":"...","DataEncryptionKeyII":"..."}' http://localhost:8123/PinpadBridge/CargaLlaves
         // {"ResponseCode":0,"ResponseDescription":"OK"}
 
         WRITE_LOG("%s starts", __FUNCTION__);
@@ -818,7 +928,7 @@ namespace json
 
     static int lectura_pin(const struct serialport::parameters &parameters, value &request, value &response)
     {
-        // curl -X POST -H "Content-Type: application/json" -d '{"PinLength":4,"WorkingKey":null,"Message":["<----LINE 1---->","<----LINE 1---->"]}' http://localhost:8123/PinpadBridge/LecturaPin
+        // curl -H "Content-Type: application/json" -d '{"PinLength":4,"WorkingKey":null,"Message":["<----LINE 1---->","<----LINE 1---->"]}' http://localhost:8123/PinpadBridge/LecturaPin
         // {"PinBlock":"...","ResponseCode":0,"ResponseDescription":"OK"}
 
         WRITE_LOG("%s starts", __FUNCTION__);
@@ -1217,13 +1327,13 @@ static void read_ini(struct serialport::parameters &parameters)
     }
     WRITE_LOG("Initialisation file path=%s", file_path);
 
-    GetPrivateProfileString("log", "file", "false", value, sizeof(value), file_path);
+    GET_PRIVATE_PROFILE_STRING("log", "file", "false", value, sizeof(value), file_path);
     if (!_stricmp(value, "true")) log_to_file = true;
     else log_to_file = false;
 
     // Read the INI file
-    GetPrivateProfileString("serialport", "port", "COM1", value, sizeof(value), file_path); parameters.port = value;
-    GetPrivateProfileString("serialport", "baudrate", "9600", value, sizeof(value), file_path); parameters.baudrate = atol(value);
+    GET_PRIVATE_PROFILE_STRING("serialport", "port", "COM1", value, sizeof(value), file_path); parameters.port = value;
+    GET_PRIVATE_PROFILE_STRING("serialport", "baudrate", "9600", value, sizeof(value), file_path); parameters.baudrate = atol(value);
     switch (parameters.baudrate)
     {
     case 110: case 300: case 600: case 1200: case 2400: case 4800: case 9600: case 14400:
@@ -1232,9 +1342,9 @@ static void read_ini(struct serialport::parameters &parameters)
     default:
         parameters.baudrate = 9600;
     }
-    GetPrivateProfileString("serialport", "databits", "8", value, sizeof(value), file_path); parameters.databits = atoi(value);
+    GET_PRIVATE_PROFILE_STRING("serialport", "databits", "8", value, sizeof(value), file_path); parameters.databits = atoi(value);
     if ((parameters.databits < 4) || (parameters.databits > 8)) parameters.databits = 8;
-    GetPrivateProfileString("serialport", "stopbits", "1", value, sizeof(value), file_path); parameters.stopbits = atof(value);
+    GET_PRIVATE_PROFILE_STRING("serialport", "stopbits", "1", value, sizeof(value), file_path); parameters.stopbits = atof(value);
     switch (static_cast<int>(parameters.stopbits * 10))
     {
     case 10: case 15: case 20:
@@ -1242,37 +1352,58 @@ static void read_ini(struct serialport::parameters &parameters)
     default:
         parameters.stopbits = 1;
     }
-    GetPrivateProfileString("serialport", "parity", "none", value, sizeof(value), file_path);
+    GET_PRIVATE_PROFILE_STRING("serialport", "parity", "none", value, sizeof(value), file_path);
     if (!_stricmp(value, "odd")) parameters.parity = 1;
     else if (!_stricmp(value, "even")) parameters.parity = 2;
     else if (!_stricmp(value, "mark")) parameters.parity = 3;
     else if (!_stricmp(value, "space")) parameters.parity = 4;
     else parameters.parity = 0;
-    GetPrivateProfileString("serialport", "flowcontrol", "none", value, sizeof(value), file_path);
+    GET_PRIVATE_PROFILE_STRING("serialport", "flowcontrol", "none", value, sizeof(value), file_path);
     if (!_stricmp(value, "hardware")) parameters.flowcontrol = 1;
     else if (!_stricmp(value, "software")) parameters.flowcontrol = 2;
     else parameters.flowcontrol = 0;
 
-    WRITE_LOG("port=%s", parameters.port.c_str());
-    WRITE_LOG("baudrate=%li", parameters.baudrate);
-    WRITE_LOG("databits=%i", parameters.databits);
-    WRITE_LOG("stopbits=%.1f", parameters.stopbits);
-    WRITE_LOG("parity=%s", (parameters.parity == 0) ? "none" : (parameters.parity == 1) ? "odd" : (parameters.parity == 2) ? "even" : (parameters.parity == 3) ? "mark" : "space");
-    WRITE_LOG("flowcontrol=%s", (parameters.flowcontrol == 0) ? "none" : (parameters.flowcontrol == 1) ? "hardware" : "software");
+    GET_PRIVATE_PROFILE_STRING("tcp", "port", "8123", value, sizeof(value), file_path); port = atoi(value);
+    GET_PRIVATE_PROFILE_STRING("tcp", "recv_timeout", "10", value, sizeof(value), file_path); recv_timeout = atoi(value);
+
+    WRITE_LOG("log_to_file=%s", log_to_file ? "true" : "false");
+    WRITE_LOG("tcp port=%i", port);
+    WRITE_LOG("tcp recv_timeout=%i", recv_timeout);
+    WRITE_LOG("serial port=%s", parameters.port.c_str());
+    WRITE_LOG("serial baudrate=%li", parameters.baudrate);
+    WRITE_LOG("serial databits=%i", parameters.databits);
+    WRITE_LOG("serial stopbits=%.1f", parameters.stopbits);
+    WRITE_LOG("serial parity=%s", (parameters.parity == 0) ? "none" : (parameters.parity == 1) ? "odd" : (parameters.parity == 2) ? "even" : (parameters.parity == 3) ? "mark" : "space");
+    WRITE_LOG("serial flowcontrol=%s", (parameters.flowcontrol == 0) ? "none" : (parameters.flowcontrol == 1) ? "hardware" : "software");
 }
 
 // REST API
+static int http_204(struct soap *soap)
+{
+    if (soap->origin && soap->cors_method) /* CORS Origin and Access-Control-Request-Method headers */
+    {
+        if (soap->cors_allow)
+        {
+            soap->cors_origin = soap->origin; /* modify this code or hook your own soap->fopt() callback with logic */
+        }
+        soap->cors_methods = "GET, PUT, PATCH, POST, HEAD, OPTIONS";
+        soap->cors_headers = soap->cors_header;
+        soap->cors_allow_private_network = soap->cors_request_private_network;
+        //soap->keep_alive = 0;
+    }
+    return soap_send_empty_response(soap, 204);
+}
+
 static int rest_api()
 {
     // Read the ini file
     struct serialport::parameters parameters;
     read_ini(parameters);
-
     
     // create an allocation context
     soap *ctx = soap_new1(SOAP_IO_KEEPALIVE | SOAP_C_UTFSTRING);
-    // bind to port 8123
-    if (!soap_valid_socket(soap_bind(ctx, NULL, 8123, 100)))
+    // bind to port 
+    if (!soap_valid_socket(soap_bind(ctx, NULL, port, 100)))
     {
         std::stringstream ss;
         soap_stream_fault(ctx, ss);
@@ -1281,6 +1412,11 @@ static int rest_api()
     }
     else
     {
+        WRITE_LOG("Listening on 0.0.0.0:%i", port);
+        register_gsoap_log_plugin(ctx);
+        //ctx->recv_timeout = recv_timeout;
+        ctx->fopt = http_204;
+
         // accept messages in server loop
         run = true;
         while (run)
@@ -1309,47 +1445,60 @@ static int rest_api()
             }
             else
             {
+                SOCKADDR_IN addr = { 0 };
+                socklen_t addr_len = sizeof(addr);
+                getpeername(ctx->socket, (sockaddr *)&addr, &addr_len);
+                WRITE_LOG("Open connection from %s:%i", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
                 value request(ctx), response(ctx);
                 if (soap_begin_recv(ctx)
                     || json_recv(ctx, request)
                     || soap_end_recv(ctx))
                 {
-                    json_send_fault(ctx); // return a JSON-formatted fault
                 }
                 else
                 {
                     int rc = 0;
 
-                    if (!_stricmp(ctx->path, "/PinpadBridge/ConsultaEstado"))
+                    if (ctx->status == SOAP_POST)
                     {
-                        json::consulta_estado(parameters, request, response);
-                    }
-                    else if (!_stricmp(ctx->path, "/PinpadBridge/Mensaje"))
-                    {
-                        json::mensaje(parameters, request, response);
-                    }
-                    else if (!_stricmp(ctx->path, "/PinpadBridge/Seleccion"))
-                    {
-                        json::seleccion(parameters, request, response);
-                    }
-                    else if (!_stricmp(ctx->path, "/PinpadBridge/LecturaTarjeta"))
-                    {
-                        json::lectura_tarjeta(parameters, request, response);
-                    }
-                    else if (!_stricmp(ctx->path, "/PinpadBridge/CargaLlaves"))
-                    {
-                        json::carga_llaves(parameters, request, response);
-                    }
-                    else if (!_stricmp(ctx->path, "/PinpadBridge/LecturaPin"))
-                    {
-                        json::lectura_pin(parameters, request, response);
+                        if (!_stricmp(ctx->path, "/PinpadBridge/ConsultaEstado"))
+                        {
+                            json::consulta_estado(parameters, request, response);
+                        }
+                        else if (!_stricmp(ctx->path, "/PinpadBridge/Mensaje"))
+                        {
+                            json::mensaje(parameters, request, response);
+                        }
+                        else if (!_stricmp(ctx->path, "/PinpadBridge/Seleccion"))
+                        {
+                            json::seleccion(parameters, request, response);
+                        }
+                        else if (!_stricmp(ctx->path, "/PinpadBridge/LecturaTarjeta"))
+                        {
+                            json::lectura_tarjeta(parameters, request, response);
+                        }
+                        else if (!_stricmp(ctx->path, "/PinpadBridge/CargaLlaves"))
+                        {
+                            json::carga_llaves(parameters, request, response);
+                        }
+                        else if (!_stricmp(ctx->path, "/PinpadBridge/LecturaPin"))
+                        {
+                            json::lectura_pin(parameters, request, response);
+                        }
+                        else
+                        {
+                            WRITE_LOG("[%s] not found", ctx->path);
+                            rc = 404;
+                            response["ResponseCode"] = -1;
+                            response["ResponseDescription"] = "URI no existe";
+                        }
                     }
                     else
                     {
-                        WRITE_LOG("[%s] not found", ctx->path);
-                        rc = 404;
+                        WRITE_LOG("Invalid HTTP METHOD. We only support POST", ctx->path);
+                        rc = 405;
                         response["ResponseCode"] = -1;
-                        response["ResponseDescription"] = "URI no existe";
+                        response["ResponseDescription"] = "Debe ser POST";
                     }
 
                     if (!response.has("ResponseCode") || !response.has("ResponseDescription"))
@@ -1361,10 +1510,10 @@ static int rest_api()
 
                     // set http content type
                     ctx->http_content = "application/json; charset=utf-8";
-                    ctx->keep_alive = false;
-                    if (!ctx->cors_origin || !ctx->cors_origin[0])
+                    //ctx->keep_alive = 0;
+                    if (ctx->cors_origin && (ctx->cors_origin[0] == '*'))
                     {
-                        ctx->cors_origin = "*";
+                        ctx->cors_origin = ctx->origin;
                     }
 
                     // send http header 200 OK and JSON response
@@ -1377,13 +1526,15 @@ static int rest_api()
                         std::string fault_str = ss.str();
                         WRITE_LOG("%s", fault_str.c_str());
                     }
-                    soap_closesock(ctx);
                 }
 
-                // dealloc all
-                soap_destroy(ctx);
-                soap_end(ctx);
+                soap_closesock(ctx);
+                WRITE_LOG("Close connection from %s:%i", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
             }
+
+            // dealloc all
+            soap_destroy(ctx);
+            soap_end(ctx);
         }
     }
     // free context

@@ -2935,8 +2935,10 @@ struct SOAP_CMAC soap
   const char *cors_allow;       /* CORS Allow-Origin header default value of "*" */
   const char *cors_method;      /* CORS Request-Method header received */
   const char *cors_header;      /* CORS Request-Headers header received */
+  const char *cors_request_private_network;/* CORS Request-Private-Network header received */
   const char *cors_methods;     /* CORS Allow-Methods header returned by server */
   const char *cors_headers;     /* CORS Allow-Headers header returned by server */
+  const char *cors_allow_private_network;/* CORS Allow-Private-Network header returned by server */
   const char *x_frame_options;  /* "DENY", "SAMEORIGIN" (default), or "ALLOW-FROM uri" */
   int status;                   /* HTTP status code, HTTP method, or other error code */
   int error;

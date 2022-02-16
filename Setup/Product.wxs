@@ -48,12 +48,10 @@
 		<ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
             <Component Id="ProductComponent">
                 <RemoveFolder Id='RemoveProgramMenuProductDir'  Directory='ProgramMenuProductDir' On='uninstall'/>
-                <File Id='PinpadBridge2.exe' Name='PinpadBridge2.exe' Source='$(var.PinpadBridge2.TargetPath)' KeyPath='yes' >
-                </File>
+                <File Id='PinpadBridge2.exe' Name='PinpadBridge2.exe' Source='$(var.PinpadBridge2.TargetPath)' KeyPath='yes' />
             </Component>
             <Component Id="ProductIni">
-                <File Id='PinpadBridge2.ini' Name='PinpadBridge2.ini' Source='$(var.PinpadBridge2.TargetPath)' KeyPath='yes' >
-                </File>
+                <File Id='PinpadBridge2.ini' Name='PinpadBridge2.ini' Source='$(var.PinpadBridge2.TargetPath)' KeyPath='yes' />
             </Component>
             <Component Id="WindowsServiceStart" Guid="{27C2EC8B-1136-4705-86EA-8D84530D2D03}">
                 <File Id='StartService' Name='Start.lnk' Source='Start.lnk' KeyPath='yes'>
