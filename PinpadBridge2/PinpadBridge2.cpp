@@ -25,7 +25,8 @@ struct Namespace namespaces[] = { {NULL, NULL} };
 static volatile bool run = false;
 static bool log_to_file = false;
 static int port = 8123;
-static int recv_timeout = 8123;
+static int recv_timeout = 10;
+static int keep_alive = 0;
 
 struct logging_data
 {
@@ -928,8 +929,11 @@ namespace json
 
     static int lectura_pin(const struct serialport::parameters &parameters, value &request, value &response)
     {
-        // curl -H "Content-Type: application/json" -d '{"PinLength":4,"WorkingKey":null,"Message":["<----LINE 1---->","<----LINE 1---->"]}' http://localhost:8123/PinpadBridge/LecturaPin
-        // {"PinBlock":"...","ResponseCode":0,"ResponseDescription":"OK"}
+		// Sin working key
+		// curl -H "Content-Type: application/json" -d '{"PinLength":4,"PinBlockType":2,"Message":["<----LINE 1---->","<----LINE 1---->"]}' http://localhost:8123/PinpadBridge/LecturaPin
+		// Con working key
+		// curl -H "Content-Type: application/json" -d '{"PinLength":4,"PinBlockType":2,"WorkingKey":"DEADBEEF","Message":["<----LINE 1---->","<----LINE 1---->"]}' http://localhost:8123/PinpadBridge/LecturaPin
+        // {"PinBlock":"...","KSN":"...","Other":"...","ResponseCode":0,"ResponseDescription":"OK"}
 
         WRITE_LOG("%s starts", __FUNCTION__);
         write_log_json("request:", 0, request);
@@ -939,8 +943,8 @@ namespace json
         {
             "1060",
             static_cast<const char *>(request["PinLength"]),
-            strlen(static_cast<const char *>(request["WorkingKey"])) ? "1" : "0",
-            pad(static_cast<const char *>(request["WorkingKey"]), 32),
+            static_cast<const char *>(request["PinBlockType"]),
+            pad(request["WorkingKey"].is_null() ? "" : static_cast<const char *>(request["WorkingKey"]), 32),
             pad(messages > 0 ? static_cast<const char *>(static_cast<_array>(request["Message"])[0]) : "", 16),
             pad(messages > 1 ? static_cast<const char *>(static_cast<_array>(request["Message"])[1]) : "", 16),
         };
@@ -948,11 +952,13 @@ namespace json
         std::stringstream serialport_response_description;
         if (serialport::doit(parameters, serialport_request, serialport_response, serialport_response_description, 10, 120))
         {
-            if (serialport_response.size() == 10)
+            if (serialport_response.size() == 6)
             {
                 response["ResponseCode"] = atoi(serialport_response[1].c_str());
                 response["ResponseDescription"] = response["ResponseCode"] == 0 ? "OK" : "ERROR";
                 response["PinBlock"] = serialport_response[2];
+                response["KSN"] = serialport_response[3];
+                response["Other"] = serialport_response[4];
             }
             else
             {
@@ -1365,10 +1371,12 @@ static void read_ini(struct serialport::parameters &parameters)
 
     GET_PRIVATE_PROFILE_STRING("tcp", "port", "8123", value, sizeof(value), file_path); port = atoi(value);
     GET_PRIVATE_PROFILE_STRING("tcp", "recv_timeout", "10", value, sizeof(value), file_path); recv_timeout = atoi(value);
+    GET_PRIVATE_PROFILE_STRING("tcp", "keep_alive", "0", value, sizeof(value), file_path); keep_alive = atoi(value);
 
     WRITE_LOG("log_to_file=%s", log_to_file ? "true" : "false");
     WRITE_LOG("tcp port=%i", port);
     WRITE_LOG("tcp recv_timeout=%i", recv_timeout);
+    WRITE_LOG("tcp keep_alive=%i", keep_alive);
     WRITE_LOG("serial port=%s", parameters.port.c_str());
     WRITE_LOG("serial baudrate=%li", parameters.baudrate);
     WRITE_LOG("serial databits=%i", parameters.databits);
@@ -1389,17 +1397,111 @@ static int http_204(struct soap *soap)
         soap->cors_methods = "GET, PUT, PATCH, POST, HEAD, OPTIONS";
         soap->cors_headers = soap->cors_header;
         soap->cors_allow_private_network = soap->cors_request_private_network;
-        //soap->keep_alive = 0;
+        soap->keep_alive = keep_alive;
     }
     return soap_send_empty_response(soap, 204);
+}
+
+struct serialport::parameters parameters;
+
+static DWORD __stdcall socket_thread_func(void *context)
+{
+    // Process the socket
+    soap *ctx = static_cast<soap *>(context);
+    SOCKADDR_IN addr = { 0 };
+    socklen_t addr_len = sizeof(addr);
+    getpeername(ctx->socket, (sockaddr *)&addr, &addr_len);
+    WRITE_LOG("Open connection from %s:%i", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
+    value request(ctx), response(ctx);
+    if (soap_begin_recv(ctx)
+        || json_recv(ctx, request)
+        || soap_end_recv(ctx))
+    {
+    }
+    else
+    {
+        int rc = 0;
+
+        if (ctx->status == SOAP_POST)
+        {
+            if (!_stricmp(ctx->path, "/PinpadBridge/ConsultaEstado"))
+            {
+                json::consulta_estado(parameters, request, response);
+            }
+            else if (!_stricmp(ctx->path, "/PinpadBridge/Mensaje"))
+            {
+                json::mensaje(parameters, request, response);
+            }
+            else if (!_stricmp(ctx->path, "/PinpadBridge/Seleccion"))
+            {
+                json::seleccion(parameters, request, response);
+            }
+            else if (!_stricmp(ctx->path, "/PinpadBridge/LecturaTarjeta"))
+            {
+                json::lectura_tarjeta(parameters, request, response);
+            }
+            else if (!_stricmp(ctx->path, "/PinpadBridge/CargaLlaves"))
+            {
+                json::carga_llaves(parameters, request, response);
+            }
+            else if (!_stricmp(ctx->path, "/PinpadBridge/LecturaPin"))
+            {
+                json::lectura_pin(parameters, request, response);
+            }
+            else
+            {
+                WRITE_LOG("[%s] not found", ctx->path);
+                rc = 404;
+                response["ResponseCode"] = -1;
+                response["ResponseDescription"] = "URI no existe";
+            }
+        }
+        else
+        {
+            WRITE_LOG("Invalid HTTP METHOD. We only support POST", ctx->path);
+            rc = 405;
+            response["ResponseCode"] = -1;
+            response["ResponseDescription"] = "Debe ser POST";
+        }
+
+        if (!response.has("ResponseCode") || !response.has("ResponseDescription"))
+        {
+            rc = -1;
+            response["ResponseCode"] = -1;
+            response["ResponseDescription"] = "ERROR";
+        }
+
+        // set http content type
+        ctx->http_content = "application/json; charset=utf-8";
+        ctx->keep_alive = keep_alive;
+        if (ctx->cors_origin && (ctx->cors_origin[0] == '*'))
+        {
+            ctx->cors_origin = ctx->origin;
+        }
+
+        // send http header 200 OK and JSON response
+        if (soap_response(ctx, SOAP_FILE + rc)
+            || json_send(ctx, response)
+            || soap_end_send(ctx))
+        {
+            std::stringstream ss;
+            soap_stream_fault(ctx, ss);
+            std::string fault_str = ss.str();
+            WRITE_LOG("%s", fault_str.c_str());
+        }
+    }
+
+    soap_closesock(ctx);
+    WRITE_LOG("Close connection from %s:%i", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
+
+    return 0;
 }
 
 static int rest_api()
 {
     // Read the ini file
-    struct serialport::parameters parameters;
     read_ini(parameters);
-    
+
     // create an allocation context
     soap *ctx = soap_new1(SOAP_IO_KEEPALIVE | SOAP_C_UTFSTRING);
     // bind to port 
@@ -1445,91 +1547,17 @@ static int rest_api()
             }
             else
             {
-                SOCKADDR_IN addr = { 0 };
-                socklen_t addr_len = sizeof(addr);
-                getpeername(ctx->socket, (sockaddr *)&addr, &addr_len);
-                WRITE_LOG("Open connection from %s:%i", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
-                value request(ctx), response(ctx);
-                if (soap_begin_recv(ctx)
-                    || json_recv(ctx, request)
-                    || soap_end_recv(ctx))
+                // Perform service-specific initialization and work.
+                HANDLE socket_thread = CreateThread(NULL, 0, socket_thread_func, soap_copy(ctx), 0, NULL);
+                if (socket_thread)
                 {
+                    WRITE_LOG("socket running on new thread");
+                    CloseHandle(socket_thread);
                 }
                 else
                 {
-                    int rc = 0;
-
-                    if (ctx->status == SOAP_POST)
-                    {
-                        if (!_stricmp(ctx->path, "/PinpadBridge/ConsultaEstado"))
-                        {
-                            json::consulta_estado(parameters, request, response);
-                        }
-                        else if (!_stricmp(ctx->path, "/PinpadBridge/Mensaje"))
-                        {
-                            json::mensaje(parameters, request, response);
-                        }
-                        else if (!_stricmp(ctx->path, "/PinpadBridge/Seleccion"))
-                        {
-                            json::seleccion(parameters, request, response);
-                        }
-                        else if (!_stricmp(ctx->path, "/PinpadBridge/LecturaTarjeta"))
-                        {
-                            json::lectura_tarjeta(parameters, request, response);
-                        }
-                        else if (!_stricmp(ctx->path, "/PinpadBridge/CargaLlaves"))
-                        {
-                            json::carga_llaves(parameters, request, response);
-                        }
-                        else if (!_stricmp(ctx->path, "/PinpadBridge/LecturaPin"))
-                        {
-                            json::lectura_pin(parameters, request, response);
-                        }
-                        else
-                        {
-                            WRITE_LOG("[%s] not found", ctx->path);
-                            rc = 404;
-                            response["ResponseCode"] = -1;
-                            response["ResponseDescription"] = "URI no existe";
-                        }
-                    }
-                    else
-                    {
-                        WRITE_LOG("Invalid HTTP METHOD. We only support POST", ctx->path);
-                        rc = 405;
-                        response["ResponseCode"] = -1;
-                        response["ResponseDescription"] = "Debe ser POST";
-                    }
-
-                    if (!response.has("ResponseCode") || !response.has("ResponseDescription"))
-                    {
-                        rc = -1;
-                        response["ResponseCode"] = -1;
-                        response["ResponseDescription"] = "ERROR";
-                    }
-
-                    // set http content type
-                    ctx->http_content = "application/json; charset=utf-8";
-                    //ctx->keep_alive = 0;
-                    if (ctx->cors_origin && (ctx->cors_origin[0] == '*'))
-                    {
-                        ctx->cors_origin = ctx->origin;
-                    }
-
-                    // send http header 200 OK and JSON response
-                    if (soap_response(ctx, SOAP_FILE + rc)
-                        || json_send(ctx, response)
-                        || soap_end_send(ctx))
-                    {
-                        std::stringstream ss;
-                        soap_stream_fault(ctx, ss);
-                        std::string fault_str = ss.str();
-                        WRITE_LOG("%s", fault_str.c_str());
-                    }
+                    WRITE_LOG("Error starting socket thread");
                 }
-
-                soap_closesock(ctx);
-                WRITE_LOG("Close connection from %s:%i", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
             }
 
             // dealloc all
