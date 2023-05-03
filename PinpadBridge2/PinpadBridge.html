@@ -1,0 +1,49 @@
+<html>
+	<head>
+		<title>PinpadBridge2 Tester</title>
+        <script crossorigin="anonymous" type="text/javascript">
+            function send(url, data) {
+                var xhr = new XMLHttpRequest();
+                xhr.open("POST", url);
+                xhr.setRequestHeader('Content-type', 'application/json');
+                xhr.responseType = 'text';
+                xhr.onload = function(event) {
+                    alert(xhr.response);
+                }
+                xhr.onerror = function(event) {
+                    alert(xhr.response);
+                }
+                xhr.send(data);
+            }
+            function consulta_estado() {
+                send("http://localhost:8123/PinpadBridge/ConsultaEstado");
+            }
+            function mensaje() {
+                send("http://localhost:8123/PinpadBridge/Mensaje");
+            }
+            function seleccion() {
+                send("http://localhost:8123/PinpadBridge/Seleccion");
+            }
+            function lectura_tarjeta() {
+                send("http://localhost:8123/PinpadBridge/LecturaTarjeta");
+            }
+            function carga_llaves() {
+                send("http://localhost:8123/PinpadBridge/CargaLlaves");
+            }
+            function lectura_pin() {
+				var data = {"PinLength":4,"PinBlockType":2,"Message":["<----LINE 1---->","<----LINE 1---->"]};
+                send("http://localhost:8123/PinpadBridge/LecturaPin", JSON.stringify(data));
+            }
+        </script>
+	</head>
+		<table>
+			<tr><td><button type="button" onclick='consulta_estado()'>Consulta Estado</button></td></tr>
+			<tr><td><button type="button" onclick='mensaje()'>Mensaje</button></td></tr>
+			<tr><td><button type="button" onclick='seleccion()'>Seleccion</button></td></tr>
+			<tr><td><button type="button" onclick='lectura_tarjeta()'>Lectura Tarjeta</button></td></tr>
+			<tr><td><button type="button" onclick='carga_llaves()'>Carga Llaves</button></td></tr>
+			<tr><td><button type="button" onclick='lectura_pin()'>Lectura PIN</button></td></tr>
+		</table>
+	<body>
+	</body>
+</html>
