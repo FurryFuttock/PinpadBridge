@@ -960,8 +960,18 @@ namespace json
                 response["KSN"] = serialport_response[3];
                 response["Other"] = serialport_response[4];
             }
-            else
-            {
+            else if (serialport_response.size() == 8)
+			{
+				response["ResponseCode"] = atoi(serialport_response[1].c_str());
+				response["ResponseDescription"] = response["ResponseCode"] == 0 ? "OK" : "ERROR";
+				response["PinBlock1"] = serialport_response[2];
+				response["KSN1"] = serialport_response[3];
+				response["PinBlock2"] = serialport_response[4];
+				response["KSN2"] = serialport_response[5];
+				response["Other"] = serialport_response[6];
+			}
+			else
+			{
                 response["ResponseCode"] = -1;
                 response["ResponseDescription"] = "Error en formato de respuesta";
             }
@@ -1417,6 +1427,10 @@ static DWORD __stdcall socket_thread_func(void *context)
         || json_recv(ctx, request)
         || soap_end_recv(ctx))
     {
+        std::stringstream ss;
+        soap_stream_fault(ctx, ss);
+        std::string fault_str = ss.str();
+        WRITE_LOG("%s", fault_str.c_str());
     }
     else
     {
